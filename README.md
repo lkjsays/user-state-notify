@@ -32,10 +32,17 @@ Mac/iPhone 상태 이벤트를 Hermes webhook으로 보내고, 로컬 상태 파
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/lkjsays/user-state-notify/main/install.sh)" -- client --server-url http://YOUR_SERVER_OR_TAILSCALE_IP:8645
 ```
 
-예시:
+예시 — Mac Studio에서 Mac Mini(서버, Tailscale IP)로 이벤트 전송:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/lkjsays/user-state-notify/main/install.sh)" -- client --server-url http://100.x.y.z:8645
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/lkjsays/user-state-notify/main/install.sh)" -- client --server-url http://100.79.41.62:8645
+```
+
+디바이스 이름에 "Studio", "mini", "Book"이 포함되면 자동으로 canonical 이름과 장소(office/home/mobile)를 매핑합니다. 수동으로 지정하려면:
+
+```bash
+USER_STATE_PLACE=office USER_STATE_DEVICE_NAME=mac-studio-office \
+  ~/.hermes/scripts/notify_login.sh --server-url http://100.79.41.62:8645
 ```
 
 ### 2) 현재 Mac을 중앙 수신 서버로 설치하기
@@ -118,8 +125,26 @@ rm -f ~/Library/LaunchAgents/com.kjlee.location-proxy.plist
 
 스크립트/로그/상태 파일은 안전을 위해 자동 삭제하지 않습니다.
 
+## 인증 시크릿
+
+클라이언트가 프록시로 POST를 보낼 때 `X-Webhook-Secret` 헤더를 사용합니다.
+
+기본값 `hermes-claude-hook`은 스크립트에 내장되어 있으며, 환경 변수나 플래그로 재정의할 수 있습니다:
+
+```bash
+# 환경 변수로 지정
+export USER_STATE_SECRET=my-secret
+~/.hermes/scripts/notify_login.sh --server-url http://...
+
+# 플래그로 지정
+~/.hermes/scripts/notify_login.sh --server-url http://... --secret my-secret
+```
+
+프록시 서버의 `CLIENT_SECRET`과 일치해야 합니다.
+
 ## 보안 메모
 
 - 이 리포지토리에는 토큰, 개인 IP, Hermes 설정 파일 원본을 넣지 않습니다.
 - 서버 URL은 설치 시 `--server-url`로 주입합니다.
-- Hermes webhook 인증/토큰이 필요한 환경이면 로컬 Hermes 설정에서 관리하세요.
+- 기본 시크릿(`hermes-claude-hook`)을 변경하려면 `USER_STATE_SECRET` 환경 변수를 설정하세요.
+  - TODO: 민감 환경에서는 launchd plist에 `EnvironmentVariables` 키로 주입하거나, 배포 전 기본값을 변경하세요.

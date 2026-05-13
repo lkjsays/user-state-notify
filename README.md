@@ -12,9 +12,9 @@ Mac/iPhone 상태 이벤트를 Hermes webhook으로 보내고, 로컬 상태 파
   - `/office_arrive`
   - `/office_depart`
 - Mac 이벤트 수신/전송
-  - `/device/login`
-  - `/device/unlock`
-  - `/device/wake`
+  - `/device/login` — 로그인/부팅 시 (RunAtLoad)
+  - `/device/wake` — 절전 해제 시 (KeepAlive 감시)
+  - `/device/unlock` — 화면 잠금 해제 시 (KeepAlive 감시)
   - `/mac_login`
 - Hermes webhook으로 Telegram 등 연결된 채널에 알림 전송
 - 상태 파일 저장
@@ -64,21 +64,29 @@ Hermes Agent가 설치되어 있고 webhook delivery를 받을 Mac에서 실행�
 ## 설치 후 확인
 
 ```bash
-launchctl list | grep -E 'user-state|location-proxy'
+launchctl list | grep -E 'user-state|location-proxy|session-watch'
 curl -fsS http://127.0.0.1:8645/health
 ```
 
 로그:
 
 ```bash
+# 서버 수신 로그
 tail -f ~/.hermes/logs/user_state_notify_proxy.log
 tail -f ~/.hermes/logs/user_state_events.jsonl
+
+# 클라이언트 절전 해제/잠금 해제 감시 로그
+tail -f ~/.hermes/logs/session_watch.log
+tail -f ~/.hermes/logs/session_watch.err.log
 ```
 
 상태 파일:
 
 ```bash
 cat ~/.hermes/state/user_state.json
+# 절전 해제/잠금 감시 내부 상태
+cat ~/.hermes/state/session_watch_heartbeat
+cat ~/.hermes/state/session_watch_lock_state
 ```
 
 ## iPhone 단축어 URL
@@ -111,15 +119,28 @@ Hermes 환경에 맞춰 webhook이 먼저 설정되어 있어야 합니다. 이�
 - `~/.hermes/scripts/user_state_notify_proxy.py`
 - `~/.hermes/scripts/location_proxy.py`
 - `~/.hermes/scripts/notify_login.sh`
+- `~/.hermes/scripts/watch_macos_session.sh`
 - `~/Library/LaunchAgents/com.kjlee.location-proxy.plist`
 - `~/Library/LaunchAgents/com.kjlee.user-state-login-notify.plist`
+- `~/Library/LaunchAgents/com.kjlee.user-state-session-watch.plist`
+
+## 절전 해제 / 잠금 해제 감지 방식
+
+`watch_macos_session.sh`는 KeepAlive LaunchAgent로 실행되며 5초마다 폴링합니다.
+
+- **절전 해제**: 하트비트 파일의 타임스탬프 갭이 60초를 초과하면 Mac이 잠들었다가 깨어난 것으로 판단 → `/device/wake` 전송
+- **잠금 해제**: `ioreg -n Root -d1`에서 `IOConsoleLocked` 키를 읽어 `잠김→해제` 전환 감지 → `/device/unlock` 전송
+- **중복 방지**: 같은 이벤트 타입은 60초 이내 재전송하지 않음
+- **항상 실행 중**: Mac이 잠들어도 launchd가 깨어날 때 자동으로 재시작
 
 ## 제거
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.kjlee.user-state-login-notify.plist 2>/dev/null || true
+launchctl unload ~/Library/LaunchAgents/com.kjlee.user-state-session-watch.plist 2>/dev/null || true
 launchctl unload ~/Library/LaunchAgents/com.kjlee.location-proxy.plist 2>/dev/null || true
 rm -f ~/Library/LaunchAgents/com.kjlee.user-state-login-notify.plist
+rm -f ~/Library/LaunchAgents/com.kjlee.user-state-session-watch.plist
 rm -f ~/Library/LaunchAgents/com.kjlee.location-proxy.plist
 ```
 

@@ -88,6 +88,8 @@ install_server() {
 
 install_client() {
   echo "Installing user-state-notify client..."
+
+  # Login notifier (RunAtLoad, one-shot)
   fetch scripts/notify_login.sh "$INSTALL_ROOT/notify_login.sh"
   chmod +x "$INSTALL_ROOT/notify_login.sh"
 
@@ -104,11 +106,30 @@ PY
 
   launchctl unload "$plist" >/dev/null 2>&1 || true
   launchctl load "$plist"
-  echo "Client launchd loaded: $plist"
+  echo "Login notifier launchd loaded: $plist"
 
   "$INSTALL_ROOT/notify_login.sh" --server-url "$SERVER_URL" || {
     echo "Warning: immediate login notification test failed. Check server URL: $SERVER_URL" >&2
   }
+
+  # Session watcher (KeepAlive, long-lived — detects wake and screen unlock)
+  fetch scripts/watch_macos_session.sh "$INSTALL_ROOT/watch_macos_session.sh"
+  chmod +x "$INSTALL_ROOT/watch_macos_session.sh"
+
+  local watch_plist="$LAUNCHD_DIR/com.kjlee.user-state-session-watch.plist"
+  fetch launchd/com.kjlee.user-state-session-watch.plist.template "$watch_plist.tmp"
+  python3 - "$watch_plist.tmp" "$watch_plist" "$HOME" "$SERVER_URL" <<'PY'
+import sys
+src, dst, home, server_url = sys.argv[1:]
+text = open(src, encoding='utf-8').read()
+text = text.replace('__HOME__', home).replace('__SERVER_URL__', server_url)
+open(dst, 'w', encoding='utf-8').write(text)
+PY
+  rm -f "$watch_plist.tmp"
+
+  launchctl unload "$watch_plist" >/dev/null 2>&1 || true
+  launchctl load "$watch_plist"
+  echo "Session watcher launchd loaded: $watch_plist"
 }
 
 if [[ "$MODE" == "server" || "$MODE" == "all" ]]; then

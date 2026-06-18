@@ -28,6 +28,11 @@ PROXY_LOG = LOG_DIR / "user_state_notify_proxy.log"
 WEBHOOK_NAME = os.environ.get("USER_STATE_WEBHOOK", "user-state-notify")
 DEFAULT_PORT = int(os.environ.get("USER_STATE_PORT", "8645"))
 
+import reminders
+
+EXPECTED_SECRET = os.environ.get("USER_STATE_SECRET", "hermes-claude-hook")
+REMINDER_STORE = reminders.ReminderStore()
+
 LOCATION_EVENTS = {
     "/home_arrive": ("location.arrive", "home", "arrive", "집에 도착했어요"),
     "/home_depart": ("location.depart", "home", "depart", "집에서 출발했어요"),
@@ -119,6 +124,7 @@ def event_from_request(path: str, query: dict, body: dict, headers: dict) -> dic
             "type": event_type,
             "source": body.get("source") or query.get("source") or "macos",
             "device": device,
+            "place": body.get("place") or query.get("place") or None,
             "message": body.get("message") or query.get("message") or default_message,
             "timestamp": ts,
             "raw_path": path,
@@ -189,6 +195,12 @@ def forward_to_hermes(event: dict) -> tuple[bool, str]:
     return False, last
 
 
+def forward_reminder_message(message: str) -> bool:
+    ok, detail = forward_to_hermes({"message": message})
+    log_line(f"reminder_forward ok={ok} detail={detail[:200]}")
+    return ok
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "user-state-notify/1.0"
 
@@ -209,6 +221,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def check_secret(self) -> bool:
+        return self.headers.get("X-Webhook-Secret") == EXPECTED_SECRET
+
     def handle_request(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
@@ -216,6 +231,40 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/health":
             self.write_json(200, {"status": "ok", "service": "user-state-notify"})
+            return
+
+        if path == "/remind" and self.command == "POST":
+            if not self.check_secret():
+                self.write_json(401, {"ok": False, "error": "unauthorized"})
+                return
+            rbody = parse_body(self)
+            try:
+                rem = REMINDER_STORE.add(
+                    text=rbody.get("text", ""),
+                    place=rbody.get("place"),
+                    device=rbody.get("device"),
+                )
+            except ValueError as exc:
+                self.write_json(400, {"ok": False, "error": str(exc)})
+                return
+            log_line(f"remind_add id={rem['id']} place={rem.get('place')} device={rem.get('device')}")
+            self.write_json(200, {"ok": True, "id": rem["id"], "reminder": rem})
+            return
+
+        if path == "/reminders" and self.command == "GET":
+            self.write_json(200, {"ok": True, "reminders": REMINDER_STORE.list(query.get("status"))})
+            return
+
+        _parts = path.strip("/").split("/")
+        if len(_parts) == 3 and _parts[0] == "reminders" and _parts[2] == "done" and self.command == "POST":
+            if not self.check_secret():
+                self.write_json(401, {"ok": False, "error": "unauthorized"})
+                return
+            rem = REMINDER_STORE.mark_done(_parts[1])
+            if rem is None:
+                self.write_json(404, {"ok": False, "error": "reminder not found", "id": _parts[1]})
+                return
+            self.write_json(200, {"ok": True, "id": rem["id"], "status": rem["status"]})
             return
 
         body = parse_body(self)
@@ -227,6 +276,15 @@ class Handler(BaseHTTPRequestHandler):
         state = update_state(event)
         ok, detail = forward_to_hermes(event)
         log_line(f"event={event.get('type')} path={path} webhook_ok={ok} detail={detail[:300]}")
+
+        if (event.get("type") or "").startswith("device."):
+            try:
+                fired = REMINDER_STORE.on_device_event(event, forward_reminder_message)
+                if fired:
+                    log_line(f"reminders_fired count={len(fired)} ids={[r['id'] for r in fired]}")
+            except Exception as exc:  # reminders are additive; never break the event response
+                log_line(f"reminder_error={exc}")
+
         self.write_json(200, {"ok": True, "event": event, "webhook_ok": ok, "webhook_detail": detail, "state_updated_at": state.get("updated_at")})
 
 

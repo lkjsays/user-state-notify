@@ -157,3 +157,77 @@ class ReminderStore:
                         self._save(data)
                     return r
             return None
+
+    def _matches(self, rem, device, place) -> bool:
+        rd, rp = rem.get("device"), rem.get("place")
+        if rd and rd != device:
+            return False
+        if rp and rp != place:
+            return False
+        return True
+
+    def _build_message(self, device, place, fire) -> str:
+        header = device + (f" ({place})" if place else "")
+        lines = [f"{i + 1}. {r['text']}  [{r['id']}]" for i, r in enumerate(fire)]
+        body = "\n".join(lines)
+        return f"📌 {header} — 할 일 {len(fire)}건\n{body}\n완료: POST /reminders/<id>/done"
+
+    def on_device_event(self, event, forward_fn) -> list:
+        with self._lock:
+            data = self._load()
+            device = event.get("device") or "unknown"
+            place = event.get("place")
+            etype = event.get("type") or ""
+            now = self._parse_dt(event.get("timestamp")) or self._now()
+
+            sessions = data.setdefault("sessions", {})
+            sess = sessions.get(device)
+
+            new_session = False
+            if etype == "device.login" or sess is None:
+                new_session = True
+            elif etype in ("device.wake", "device.unlock"):
+                last = self._parse_dt(sess.get("last_activity_at"))
+                if last is None:
+                    new_session = True
+                else:
+                    gap_min = (now - last).total_seconds() / 60.0
+                    if gap_min > self.gap_min:
+                        new_session = True
+
+            if new_session:
+                sid = (sess["id"] + 1) if sess else 1
+                sessions[device] = {
+                    "id": sid,
+                    "started_at": self._iso(now),
+                    "last_activity_at": self._iso(now),
+                }
+            else:
+                sid = sess["id"]
+                sess["last_activity_at"] = self._iso(now)
+                sessions[device] = sess
+
+            fire = []
+            for rem in data["reminders"]:
+                if rem.get("status") != "pending":
+                    continue
+                if not self._matches(rem, device, place):
+                    continue
+                prev = rem.get("fired", {}).get(device)
+                if prev and prev.get("session_id") == sid:
+                    continue
+                fire.append(rem)
+
+            if fire:
+                ok = bool(forward_fn(self._build_message(device, place, fire)))
+                if ok:
+                    for rem in fire:
+                        rem.setdefault("fired", {})[device] = {
+                            "session_id": sid,
+                            "at": self._iso(now),
+                        }
+                else:
+                    fire = []
+
+            self._save(data)
+            return fire

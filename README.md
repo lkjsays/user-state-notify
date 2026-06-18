@@ -124,6 +124,53 @@ Hermes 환경에 맞춰 webhook이 먼저 설정되어 있어야 합니다. 이�
 - `~/Library/LaunchAgents/com.kjlee.user-state-login-notify.plist`
 - `~/Library/LaunchAgents/com.kjlee.user-state-session-watch.plist`
 
+## 위치/컨텍스트 리마인더
+
+특정 장소·디바이스에서 PC를 활성화하면 묶어 둔 할 일을 알림으로 띄웁니다.
+
+### 등록
+
+```bash
+curl -fsS -X POST http://SERVER:8645/remind \
+  -H 'Content-Type: application/json' \
+  -H 'X-Webhook-Secret: hermes-claude-hook' \
+  -d '{"text":"보고서 작성@회사맥"}'
+```
+
+- `text`에 `@토큰`을 쓰면 `~/.hermes/state/reminder_aliases.json`의 매핑으로 장소/디바이스를 해석합니다.
+- 또는 구조화 필드로 직접 지정: `{"text":"보고서 작성","device":"mac-studio-office"}` 또는 `{"text":"회사일","place":"office"}`.
+- `place`/`device` 중 최소 하나가 필요합니다(없으면 400).
+
+### 별칭 커스텀
+
+`~/.hermes/state/reminder_aliases.json` (없으면 첫 등록 시 기본값 자동 생성):
+
+```json
+{
+  "회사맥":   { "device": "mac-studio-office" },
+  "회사맥북": { "device": "macbook", "place": "office" },
+  "집맥":     { "device": "mac-mini-home" },
+  "회사":     { "place": "office" },
+  "집":       { "place": "home" }
+}
+```
+
+### 조회 / 완료
+
+```bash
+curl -fsS "http://SERVER:8645/reminders?status=pending"
+
+curl -fsS -X POST http://SERVER:8645/reminders/r_ab12cd/done \
+  -H 'X-Webhook-Secret: hermes-claude-hook'
+```
+
+### 동작
+
+- 트리거: `device.login` / `device.wake` / `device.unlock`.
+- 세션당 1회 발화 — `login`은 항상 새 세션, `wake`/`unlock`은 마지막 활동 이후 간격이 임계값(기본 60분, `USER_STATE_SESSION_GAP_MIN`)을 넘을 때만 새 세션.
+- 매칭은 AND: 지정한 `place`/`device` 조건이 모두 일치해야 발화.
+- 완료(`done`) 표시 전까지 세션이 바뀔 때마다 다시 알립니다.
+
 ## 절전 해제 / 잠금 해제 감지 방식
 
 `watch_macos_session.sh`는 KeepAlive LaunchAgent로 실행되며 5초마다 폴링합니다.

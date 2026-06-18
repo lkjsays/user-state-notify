@@ -199,6 +199,17 @@ class EventTests(unittest.TestCase):
         self.assertIn("보고서 작성", self.sent[0])
         self.assertIn(r["id"], self.sent[0])
 
+    def test_naive_timestamp_event_still_fires(self):
+        self.store.add("보고서", device="mac-studio-office")
+        event = {
+            "type": "device.login",
+            "device": "mac-studio-office",
+            "place": "office",
+            "timestamp": "2026-06-18T09:00:00",  # naive, no offset
+        }
+        fired = self.store.on_device_event(event, self.forward)
+        self.assertEqual(len(fired), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

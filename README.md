@@ -155,6 +155,8 @@ curl -fsS -X POST http://SERVER:8645/remind \
 }
 ```
 
+> **주의:** `place`가 설정된 별칭(예: `회사맥북` → `place: office`)은 클라이언트가 해당 장소를 실제로 보고할 때만 발화합니다. `notify_login.sh`는 MacBook을 기본적으로 `place=mobile`로 매핑하므로, `@회사맥북`(place=office) 리마인더는 클라이언트를 `--place office`로 설치·실행하지 않으면 MacBook 로그인 시 발화하지 않습니다.
+
 ### 조회 / 완료
 
 ```bash

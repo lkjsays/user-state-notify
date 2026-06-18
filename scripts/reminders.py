@@ -53,9 +53,12 @@ class ReminderStore:
         if not s:
             return None
         try:
-            return datetime.fromisoformat(s)
+            dt = datetime.fromisoformat(s)
         except Exception:
             return None
+        if dt.tzinfo is None:
+            dt = dt.astimezone()
+        return dt
 
     # ---- storage (caller holds lock) ----
     def _load(self) -> dict:
@@ -94,7 +97,9 @@ class ReminderStore:
             return dict(DEFAULT_ALIASES)
         try:
             return json.loads(self.aliases_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            import sys
+            print(f"reminder_aliases.json parse failed, using defaults: {exc}", file=sys.stderr)
             return dict(DEFAULT_ALIASES)
 
     def _apply_tokens(self, text, aliases, place, device):

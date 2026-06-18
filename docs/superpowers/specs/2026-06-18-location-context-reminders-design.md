@@ -21,7 +21,7 @@
 | 등록 | HTTP 엔드포인트(핵심). AI agent·curl·단축어가 호출. Telegram/AI 입력은 그 위에 얹힘 |
 | 수명 | 완료 표시 전까지 반복 |
 | 트리거 이벤트 | login / wake / unlock 모두 |
-| 재알림 주기 | **세션당 1회** (login·wake가 새 세션 시작, unlock은 같은 세션) |
+| 재알림 주기 | **세션당 1회**. 세션 경계는 *간격 기반* — login은 항상 새 세션, wake/unlock은 마지막 활동 이후 간격이 임계값(기본 60분, 설정 가능)을 넘을 때만 새 세션 |
 | 완료 처리 | HTTP 엔드포인트 |
 | 별칭(@토큰) | 사용자 편집 설정 파일로 커스텀 |
 
@@ -94,9 +94,17 @@ forward_to_hermes()  (기존 함수 재사용) → Telegram
 ```json
 {
   "reminders": [ ... ],
-  "sessions": { "mac-studio-office": { "id": 5, "started_at": "..." } }
+  "sessions": {
+    "mac-studio-office": {
+      "id": 5,
+      "started_at": "2026-06-18T09:00:00+09:00",
+      "last_activity_at": "2026-06-18T11:30:00+09:00"
+    }
+  }
 }
 ```
+
+`last_activity_at`은 디바이스 이벤트가 올 때마다 그 timestamp로 갱신한다. 세션 경계 판정에 쓰인다.
 
 - 기존 `save_state`처럼 원자적 쓰기(tmp → replace).
 - `ThreadingHTTPServer`이므로 동시 쓰기 가능 → 모듈 내 `threading.Lock`으로 모든 read-modify-write 보호.
@@ -135,10 +143,21 @@ forward_to_hermes()  (기존 함수 재사용) → Telegram
 
 ## 발화/세션 로직
 
+wake와 unlock은 동일한 "활동 재개(resume)" 신호로 취급한다 — 절전 해제 시 둘이 함께
+발생하기도 하고, 리마인더 관점에서 중요한 것은 이벤트 종류가 아니라 *자리를 비운 시간*이기
+때문이다. 세션 경계는 이벤트 종류가 아니라 **간격**으로 판정한다.
+
+`SESSION_GAP_MIN` = 새 세션으로 칠 비활동 간격(분). 기본 60, 환경변수
+`USER_STATE_SESSION_GAP_MIN`으로 조정 가능.
+
 `reminders.on_device_event(event)`가 디바이스 이벤트마다 호출된다:
 
-1. `event.type`이 `device.login` 또는 `device.wake` → 해당 디바이스 **세션 id를 +1**(새 세션 시작). `device.unlock` → 세션 id 유지(같은 세션).
-2. 현재 세션 id를 확보한다.
+1. 세션 경계 판정:
+   - `event.type == device.login` → 항상 **새 세션 시작**(세션 id +1).
+   - `device.wake` / `device.unlock` → 마지막 활동(`last_activity_at`) 이후 간격이
+     `SESSION_GAP_MIN`을 넘으면 새 세션 시작, 아니면 현재 세션 유지.
+   - 세션 정보가 아예 없으면(첫 이벤트) 새 세션 시작.
+2. 해당 디바이스의 `last_activity_at`을 이벤트 timestamp로 갱신하고 현재 세션 id를 확보한다.
 3. `status == "pending"` 이면서 이벤트의 device/place에 매칭되는 리마인더를 순회:
    - `reminder.fired[device].session_id == 현재 세션 id` → 건너뜀(이번 세션 이미 발화).
    - 아니면 발화 목록에 추가하고 `fired[device] = {session_id, at}` 기록.
@@ -146,9 +165,10 @@ forward_to_hermes()  (기존 함수 재사용) → Telegram
 
 결과적으로:
 
-- 자리에 와서 부팅(login) 또는 절전 해제(wake) → 새 세션 → 대기 중 리마인더 발화.
-- 같은 세션 중 잠금해제(unlock) 반복 → 재발화 안 함.
-- 세션 도중 새로 등록한 리마인더는 이번 세션 발화 기록이 없으므로 다음 이벤트(unlock 포함)에서 1회 발화 후 같은 세션은 침묵.
+- 자리에 와서 부팅(login) → 항상 새 세션 → 대기 중 리마인더 발화.
+- 오래 비웠다 돌아옴(절전 해제든 잠금만이든, 간격 > 임계값) → 새 세션 → 발화.
+- 잠깐 자리 비움(간격 ≤ 임계값) 후 재개 → 같은 세션 → 재발화 안 함.
+- 세션 도중 새로 등록한 리마인더는 이번 세션 발화 기록이 없으므로 다음 이벤트에서 1회 발화 후 같은 세션은 침묵.
 
 ### Telegram 묶음 메시지 예시
 
@@ -175,13 +195,14 @@ forward_to_hermes()  (기존 함수 재사용) → Telegram
 1. 등록 → `list_reminders`에 pending으로 보임
 2. `@토큰` 파싱: `회사맥` → `device=mac-studio-office`
 3. 조건 0개 등록 거부
-4. login 이벤트 → 매칭 리마인더 발화, `fired` 기록
-5. 같은 세션 unlock → 재발화 안 함
-6. wake(새 세션) → 재발화
-7. 세션 도중 등록 → 다음 이벤트에서 1회 발화
-8. place 매칭 / device 매칭 / 둘 다(AND)
-9. 완료 처리 → 이후 발화 안 함, 멱등성
-10. Hermes 전송 실패 시 `fired` 미기록(재시도 보장)
+4. login 이벤트 → 항상 새 세션, 매칭 리마인더 발화, `fired` 기록
+5. 짧은 간격(≤ 임계값) 후 unlock/wake → 같은 세션 → 재발화 안 함
+6. 긴 간격(> 임계값) 후 unlock → 새 세션 → 재발화 (절전 없이 잠금만이어도)
+7. 긴 간격(> 임계값) 후 wake → 새 세션 → 재발화
+8. 세션 도중 등록 → 다음 이벤트에서 1회 발화
+9. place 매칭 / device 매칭 / 둘 다(AND)
+10. 완료 처리 → 이후 발화 안 함, 멱등성
+11. Hermes 전송 실패 시 `fired` 미기록(재시도 보장)
 
 프록시 HTTP 계층은 기존에 테스트가 없으므로 핵심 로직에 테스트를 집중하고, 엔드포인트는 수동 `curl` 확인으로 둔다.
 

@@ -57,6 +57,30 @@ curl -fsS -X POST http://127.0.0.1:8645/device/unlock \
   -d '{"device":"test-mac","source":"manual","message":"test-mac 화면 잠금 해제"}'
 ```
 
+## 리마인더 수동 테스트
+
+```bash
+# 등록
+curl -fsS -X POST http://127.0.0.1:8645/remind \
+  -H 'Content-Type: application/json' \
+  -H 'X-Webhook-Secret: hermes-claude-hook' \
+  -d '{"text":"보고서 작성@회사맥"}'
+
+# 목록
+curl -fsS "http://127.0.0.1:8645/reminders?status=pending"
+
+# 완료 (id는 등록 응답의 값)
+curl -fsS -X POST http://127.0.0.1:8645/reminders/<ID>/done \
+  -H 'X-Webhook-Secret: hermes-claude-hook'
+```
+
+저장 파일:
+
+```bash
+cat ~/.hermes/state/reminders.json
+cat ~/.hermes/state/reminder_aliases.json
+```
+
 ## 세션 감시 상태 확인
 
 ```bash

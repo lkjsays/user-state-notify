@@ -66,6 +66,7 @@ fetch() {
 install_server() {
   echo "Installing user-state-notify server..."
   fetch scripts/user_state_notify_proxy.py "$INSTALL_ROOT/user_state_notify_proxy.py"
+  fetch scripts/reminders.py "$INSTALL_ROOT/reminders.py"
   fetch scripts/location_proxy.py "$INSTALL_ROOT/location_proxy.py"
   chmod +x "$INSTALL_ROOT/user_state_notify_proxy.py" "$INSTALL_ROOT/location_proxy.py"
 

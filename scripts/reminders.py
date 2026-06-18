@@ -85,10 +85,12 @@ class ReminderStore:
     def _load_aliases(self) -> dict:
         if not self.aliases_path.exists():
             self.state_dir.mkdir(parents=True, exist_ok=True)
-            self.aliases_path.write_text(
+            tmp = self.aliases_path.with_suffix(".json.tmp")
+            tmp.write_text(
                 json.dumps(DEFAULT_ALIASES, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
+            tmp.replace(self.aliases_path)
             return dict(DEFAULT_ALIASES)
         try:
             return json.loads(self.aliases_path.read_text(encoding="utf-8"))

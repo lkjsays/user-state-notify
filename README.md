@@ -17,8 +17,14 @@ Mac/iPhone 상태 이벤트를 Hermes webhook으로 보내고, 로컬 상태 파
   - `/device/unlock` — 화면 잠금 해제 시 (KeepAlive 감시)
   - `/mac_login`
 - Hermes webhook으로 Telegram 등 연결된 채널에 알림 전송
+- 위치/컨텍스트 리마인더 (아래 [위치/컨텍스트 리마인더](#위치컨텍스트-리마인더) 참고)
+  - `/remind` — 리마인더 등록
+  - `/reminders` — 목록 조회
+  - `/reminders/{id}/done` — 완료 처리
 - 상태 파일 저장
   - `~/.hermes/state/user_state.json`
+  - `~/.hermes/state/reminders.json`
+  - `~/.hermes/state/reminder_aliases.json`
 - 이벤트 로그 저장
   - `~/.hermes/logs/user_state_events.jsonl`
 
@@ -117,6 +123,7 @@ Hermes 환경에 맞춰 webhook이 먼저 설정되어 있어야 합니다. 이�
 설치 후 생성/복사되는 주요 파일:
 
 - `~/.hermes/scripts/user_state_notify_proxy.py`
+- `~/.hermes/scripts/reminders.py`
 - `~/.hermes/scripts/location_proxy.py`
 - `~/.hermes/scripts/notify_login.sh`
 - `~/.hermes/scripts/watch_macos_session.sh`
@@ -210,7 +217,9 @@ export USER_STATE_SECRET=my-secret
 ~/.hermes/scripts/notify_login.sh --server-url http://... --secret my-secret
 ```
 
-프록시 서버의 `CLIENT_SECRET`과 일치해야 합니다.
+프록시 서버는 `USER_STATE_SECRET` 환경 변수(기본값 `hermes-claude-hook`)로 기대값을 정합니다. 클라이언트가 보내는 시크릿이 이 값과 일치해야 합니다.
+
+> 참고: 현재 시크릿 검증은 리마인더 쓰기 엔드포인트(`POST /remind`, `POST /reminders/{id}/done`)에만 적용됩니다. 디바이스/위치 이벤트 엔드포인트는 호환성을 위해 검증하지 않습니다.
 
 ## 보안 메모
 

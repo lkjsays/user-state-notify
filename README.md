@@ -180,6 +180,23 @@ curl -fsS -X POST http://SERVER:8645/reminders/r_ab12cd/done \
 - 매칭은 AND: 지정한 `place`/`device` 조건이 모두 일치해야 발화.
 - 완료(`done`) 표시 전까지 세션이 바뀔 때마다 다시 알립니다.
 
+### Hermes 스킬 (Telegram으로 등록)
+
+Telegram으로 Hermes에게 말하면 위 `/remind` 엔드포인트를 대신 호출하도록, Hermes 스킬을 제공합니다 (`hermes/SKILL.md`).
+
+**Telegram-Hermes(게이트웨이)가 도는 Mac에서** 설치합니다 — 보통 프록시와 같은 서버 Mac:
+
+```bash
+hermes skills install \
+  https://raw.githubusercontent.com/lkjsays/user-state-notify/main/hermes/SKILL.md \
+  --category personal --name location-reminders -y
+```
+
+- 게이트웨이 Mac이 프록시와 같은 곳이면 base URL 기본값 `http://127.0.0.1:8645`가 그대로 동작합니다.
+- 다른 Mac이면 Hermes 환경에 `USER_STATE_SERVER_URL`(서버 주소)을 설정하세요. 시크릿이 기본값과 다르면 `USER_STATE_SECRET`도.
+
+설치 후 "회사 가면 보고서 쓰라고 알려줘", "@회사맥 ~ 기억해" 같은 메시지를 보내면 Hermes가 장소/디바이스를 해석해 리마인더를 등록합니다.
+
 ## 절전 해제 / 잠금 해제 감지 방식
 
 `watch_macos_session.sh`는 KeepAlive LaunchAgent로 실행되며 5초마다 폴링합니다.

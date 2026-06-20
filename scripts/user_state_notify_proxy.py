@@ -29,8 +29,37 @@ WEBHOOK_NAME = os.environ.get("USER_STATE_WEBHOOK", "user-state-notify")
 DEFAULT_PORT = int(os.environ.get("USER_STATE_PORT", "8645"))
 
 import reminders
+import shutil
 
 EXPECTED_SECRET = os.environ.get("USER_STATE_SECRET", "hermes-claude-hook")
+
+
+def _resolve_hermes_bin() -> str:
+    """Locate the `hermes` CLI in launchd contexts where PATH is minimal.
+
+    Order: $HERMES_BIN env override, PATH lookup, then known install locations.
+    Returns "hermes" as last-resort fallback (will still FileNotFoundError, but
+    keeps existing error path intact).
+    """
+    override = os.environ.get("HERMES_BIN")
+    if override and Path(override).is_file() and os.access(override, os.X_OK):
+        return override
+    found = shutil.which("hermes")
+    if found:
+        return found
+    candidates = [
+        HOME / ".hermes" / "hermes-agent" / "venv" / "bin" / "hermes",
+        HOME / ".local" / "bin" / "hermes",
+        Path("/opt/homebrew/bin/hermes"),
+        Path("/usr/local/bin/hermes"),
+    ]
+    for c in candidates:
+        if c.is_file() and os.access(c, os.X_OK):
+            return str(c)
+    return "hermes"
+
+
+HERMES_BIN = _resolve_hermes_bin()
 REMINDER_STORE = reminders.ReminderStore()
 
 LOCATION_EVENTS = {
@@ -176,8 +205,9 @@ def forward_to_hermes(event: dict) -> tuple[bool, str]:
     }
 
     candidates = [
-        ["hermes", "webhook", "trigger", WEBHOOK_NAME, "--json", json.dumps(payload, ensure_ascii=False)],
-        ["hermes", "webhook", "send", WEBHOOK_NAME, "--json", json.dumps(payload, ensure_ascii=False)],
+        [HERMES_BIN, "webhook", "test", WEBHOOK_NAME, "--payload", json.dumps(payload, ensure_ascii=False)],
+        [HERMES_BIN, "webhook", "trigger", WEBHOOK_NAME, "--json", json.dumps(payload, ensure_ascii=False)],
+        [HERMES_BIN, "webhook", "send", WEBHOOK_NAME, "--json", json.dumps(payload, ensure_ascii=False)],
     ]
 
     last = ""

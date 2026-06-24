@@ -26,6 +26,7 @@ PROXY_LOG = LOG_DIR / "user_state_notify_proxy.log"
 
 DEFAULT_PORT = int(os.environ.get("USER_STATE_PORT", "8645"))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reminders
 import notifiers
 

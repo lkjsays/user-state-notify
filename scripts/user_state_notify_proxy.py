@@ -2,7 +2,7 @@
 """user-state-notify proxy.
 
 Small HTTP server for macOS/Hermes status events.
-It records events locally and forwards a human-readable message to Hermes webhook.
+It records events locally and forwards a human-readable message via pluggable notifiers (see notifiers.py).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ REMINDER_STORE = reminders.ReminderStore()
 
 NOTIFY_CONFIG, NOTIFY_CONFIG_ERR = notifiers.load_config()
 if NOTIFY_CONFIG is None:
-    NOTIFIERS, NOTIFY_BUILD_ERRS = [], [NOTIFY_CONFIG_ERR]
+    NOTIFIERS, NOTIFY_BUILD_ERRS = [], [NOTIFY_CONFIG_ERR or "load_config returned None"]
 else:
     NOTIFIERS, NOTIFY_BUILD_ERRS = notifiers.build_notifiers(NOTIFY_CONFIG)
 

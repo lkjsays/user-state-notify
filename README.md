@@ -48,7 +48,7 @@ Mac/iPhone 상태 이벤트를 Hermes webhook으로 보내고, 로컬 상태 파
 
 ```bash
 USER_STATE_PLACE=office USER_STATE_DEVICE_NAME=mac-studio-office \
-  ~/.hermes/scripts/notify_login.sh --server-url http://100.79.41.62:8645
+  ~/.user-state-notify/scripts/notify_login.sh --server-url http://100.79.41.62:8645
 ```
 
 ### 2) 현재 Mac을 중앙 수신 서버로 설치하기
@@ -122,14 +122,16 @@ Hermes 환경에 맞춰 webhook이 먼저 설정되어 있어야 합니다. 이�
 
 설치 후 생성/복사되는 주요 파일:
 
-- `~/.hermes/scripts/user_state_notify_proxy.py`
-- `~/.hermes/scripts/reminders.py`
-- `~/.hermes/scripts/location_proxy.py`
-- `~/.hermes/scripts/notify_login.sh`
-- `~/.hermes/scripts/watch_macos_session.sh`
+- `~/.user-state-notify/scripts/user_state_notify_proxy.py`
+- `~/.user-state-notify/scripts/reminders.py`
+- `~/.user-state-notify/scripts/location_proxy.py`
+- `~/.user-state-notify/scripts/notify_login.sh`
+- `~/.user-state-notify/scripts/watch_macos_session.sh`
 - `~/Library/LaunchAgents/com.kjlee.location-proxy.plist`
 - `~/Library/LaunchAgents/com.kjlee.user-state-login-notify.plist`
 - `~/Library/LaunchAgents/com.kjlee.user-state-session-watch.plist`
+
+> 스크립트는 `~/.hermes/`가 아닌 `~/.user-state-notify/scripts/`에 둡니다. Hermes를 재설치하면 `~/.hermes/`가 초기화되어 스크립트가 삭제되기 때문입니다. 로그/state는 `~/.hermes/` 아래 유지되며, 삭제되어도 스크립트가 자동으로 재생성합니다.
 
 ## 위치/컨텍스트 리마인더
 
@@ -253,10 +255,10 @@ rm -f ~/Library/LaunchAgents/com.kjlee.location-proxy.plist
 ```bash
 # 환경 변수로 지정
 export USER_STATE_SECRET=my-secret
-~/.hermes/scripts/notify_login.sh --server-url http://...
+~/.user-state-notify/scripts/notify_login.sh --server-url http://...
 
 # 플래그로 지정
-~/.hermes/scripts/notify_login.sh --server-url http://... --secret my-secret
+~/.user-state-notify/scripts/notify_login.sh --server-url http://... --secret my-secret
 ```
 
 프록시 서버는 `USER_STATE_SECRET` 환경 변수(기본값 `hermes-claude-hook`)로 기대값을 정합니다. 클라이언트가 보내는 시크릿이 이 값과 일치해야 합니다.

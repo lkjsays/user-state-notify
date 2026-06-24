@@ -7,7 +7,7 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/.hermes/scripts/watch_macos_session.sh</string>
+    <string>__HOME__/.user-state-notify/scripts/watch_macos_session.sh</string>
     <string>--server-url</string>
     <string>__SERVER_URL__</string>
   </array>

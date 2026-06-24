@@ -7,7 +7,7 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/.hermes/scripts/notify_login.sh</string>
+    <string>__HOME__/.user-state-notify/scripts/notify_login.sh</string>
     <string>--server-url</string>
     <string>__SERVER_URL__</string>
     <string>--event-path</string>

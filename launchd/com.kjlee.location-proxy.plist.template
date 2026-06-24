@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/python3</string>
-    <string>__HOME__/.hermes/scripts/location_proxy.py</string>
+    <string>__HOME__/.user-state-notify/scripts/location_proxy.py</string>
   </array>
 
   <key>RunAtLoad</key>

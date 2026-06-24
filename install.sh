@@ -5,7 +5,10 @@ MODE="${1:-}"
 shift || true
 SERVER_URL=""
 REPO_RAW_BASE="https://raw.githubusercontent.com/lkjsays/user-state-notify/main"
-INSTALL_ROOT="$HOME/.hermes/scripts"
+# Scripts live OUTSIDE ~/.hermes so a Hermes reinstall (which wipes ~/.hermes)
+# does not delete the user-state-notify client/server scripts. Logs and state
+# stay under ~/.hermes and are recreated on demand by the scripts.
+INSTALL_ROOT="$HOME/.user-state-notify/scripts"
 LAUNCHD_DIR="$HOME/Library/LaunchAgents"
 
 usage() {

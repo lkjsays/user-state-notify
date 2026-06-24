@@ -1,6 +1,6 @@
 # user-state-notify
 
-Mac/iPhone 상태 이벤트를 Hermes webhook으로 보내고, 로컬 상태 파일에 기록하는 작은 macOS용 알림/상태 동기화 프로젝트입니다.
+Mac/iPhone 상태 이벤트를 설정한 알림 채널(텔레그램 직접 연동·범용 웹훅·Hermes 등)로 보내고, 로컬 상태 파일에 기록하는 작은 macOS용 알림/상태 동기화 프로젝트입니다.
 
 새 Mac을 장만했을 때 이 링크만 열어서 설치할 수 있게 만든 부트스트랩 리포지토리입니다.
 
@@ -16,7 +16,7 @@ Mac/iPhone 상태 이벤트를 Hermes webhook으로 보내고, 로컬 상태 파
   - `/device/wake` — 절전 해제 시 (KeepAlive 감시)
   - `/device/unlock` — 화면 잠금 해제 시 (KeepAlive 감시)
   - `/mac_login`
-- Hermes webhook으로 Telegram 등 연결된 채널에 알림 전송
+- 설정한 알림 채널(텔레그램 직접 연동·범용 웹훅·Hermes)로 이벤트 알림 전송 (아래 [알림 채널 설정](#알림-채널-설정) 참고)
 - 위치/컨텍스트 리마인더 (아래 [위치/컨텍스트 리마인더](#위치컨텍스트-리마인더) 참고)
   - `/remind` — 리마인더 등록
   - `/reminders` — 목록 조회
@@ -53,7 +53,7 @@ USER_STATE_PLACE=office USER_STATE_DEVICE_NAME=mac-studio-office \
 
 ### 2) 현재 Mac을 중앙 수신 서버로 설치하기
 
-Hermes Agent가 설치되어 있고 webhook delivery를 받을 Mac에서 실행합니다.
+이벤트를 수신해 설정한 알림 채널로 전달할 Mac에서 실행합니다. (Hermes는 `hermes` notifier를 쓸 때만 필요하며, 텔레그램 직접 연동·웹훅만 쓰면 Hermes 없이 동작합니다.)
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/lkjsays/user-state-notify/main/install.sh)" -- server
@@ -106,13 +106,13 @@ cat ~/.hermes/state/session_watch_lock_state
 
 POST 방식 권장. GET도 호환됩니다.
 
-## Hermes webhook 준비
+## Hermes webhook 준비 (`hermes` notifier 사용 시에만)
 
-서버 모드는 Hermes Agent의 webhook subscription 이름 `user-state-notify`로 전달합니다.
+알림 채널은 [알림 채널 설정](#알림-채널-설정)의 `config.json`으로 정합니다. 텔레그램 직접 연동(`telegram`)이나 범용 웹훅(`webhook`)만 쓰면 이 절은 건너뛰어도 됩니다.
 
-Hermes 환경에 맞춰 webhook이 먼저 설정되어 있어야 합니다. 이미 설정되어 있다면 추가 작업이 필요 없습니다.
+`hermes` notifier를 활성화한 경우에만, 서버는 Hermes Agent의 webhook subscription 이름(기본 `user-state-notify`, config의 `webhook_name`)으로 전달합니다. 이때 Hermes 환경에 webhook이 먼저 설정되어 있어야 합니다(이미 있다면 추가 작업 불필요).
 
-필요한 경우 Hermes 설정에서 다음 의도를 가진 webhook을 만들어주세요.
+필요하면 Hermes 설정에서 다음 의도를 가진 webhook을 만들어주세요.
 
 - name: `user-state-notify`
 - delivery: direct

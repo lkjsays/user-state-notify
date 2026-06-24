@@ -1,0 +1,10 @@
+{
+  "notifiers": [
+    { "type": "telegram", "enabled": true,
+      "bot_token": "PUT-BOT-TOKEN-HERE", "chat_id": "PUT-CHAT-ID-HERE" },
+    { "type": "webhook", "enabled": false,
+      "url": "https://example.com/hook", "headers": {} },
+    { "type": "hermes", "enabled": false,
+      "webhook_name": "user-state-notify" }
+  ]
+}

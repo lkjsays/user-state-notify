@@ -66,10 +66,24 @@ fetch() {
   curl -fsSL "$REPO_RAW_BASE/$src" -o "$dst"
 }
 
+install_config_sample() {
+  local cfg_dir="$HOME/.user-state-notify"
+  mkdir -p "$cfg_dir"
+  fetch config.json.example "$cfg_dir/config.json.example"
+  if [[ ! -f "$cfg_dir/config.json" ]]; then
+    cp "$cfg_dir/config.json.example" "$cfg_dir/config.json"
+    chmod 600 "$cfg_dir/config.json"
+    echo "Created $cfg_dir/config.json from sample — edit it with your bot token / webhook URL."
+  else
+    echo "Kept existing $cfg_dir/config.json"
+  fi
+}
+
 install_server() {
   echo "Installing user-state-notify server..."
   fetch scripts/user_state_notify_proxy.py "$INSTALL_ROOT/user_state_notify_proxy.py"
   fetch scripts/reminders.py "$INSTALL_ROOT/reminders.py"
+  fetch scripts/notifiers.py "$INSTALL_ROOT/notifiers.py"
   fetch scripts/location_proxy.py "$INSTALL_ROOT/location_proxy.py"
   chmod +x "$INSTALL_ROOT/user_state_notify_proxy.py" "$INSTALL_ROOT/location_proxy.py"
 
@@ -88,6 +102,7 @@ install_server() {
   else
     echo "Warning: health check failed. See ~/.hermes/logs/user_state_notify_proxy.launchd.err.log" >&2
   fi
+  install_config_sample
 }
 
 install_client() {
@@ -134,6 +149,7 @@ PY
   launchctl unload "$watch_plist" >/dev/null 2>&1 || true
   launchctl load "$watch_plist"
   echo "Session watcher launchd loaded: $watch_plist"
+  install_config_sample
 }
 
 if [[ "$MODE" == "server" || "$MODE" == "all" ]]; then

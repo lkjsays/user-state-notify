@@ -133,6 +133,66 @@ Hermes 환경에 맞춰 webhook이 먼저 설정되어 있어야 합니다. 이�
 
 > 스크립트는 `~/.hermes/`가 아닌 `~/.user-state-notify/scripts/`에 둡니다. Hermes를 재설치하면 `~/.hermes/`가 초기화되어 스크립트가 삭제되기 때문입니다. 로그/state는 `~/.hermes/` 아래 유지되며, 삭제되어도 스크립트가 자동으로 재생성합니다.
 
+## 알림 채널 설정
+
+이벤트 수신 시 어느 채널로 알림을 보낼지 `~/.user-state-notify/config.json`으로 지정합니다. 설치 시 샘플이 자동 배치되며, 기존 파일이 있으면 덮어쓰지 않습니다.
+
+```json
+{
+  "notifiers": [
+    { "type": "telegram", "enabled": true,
+      "bot_token": "PUT-BOT-TOKEN-HERE", "chat_id": "PUT-CHAT-ID-HERE" },
+    { "type": "webhook", "enabled": false,
+      "url": "https://example.com/hook", "headers": {} },
+    { "type": "hermes", "enabled": false,
+      "webhook_name": "user-state-notify" }
+  ]
+}
+```
+
+### 내장 채널 종류
+
+| type | 필수 필드 | 설명 |
+|------|-----------|------|
+| `telegram` | `bot_token`, `chat_id` | Telegram Bot API로 직접 메시지 전송 |
+| `webhook` | `url` | 지정 URL에 JSON POST. `headers`로 인증 헤더 추가 가능 |
+| `hermes` | `webhook_name` | 로컬 Hermes Agent webhook subscription으로 전달 |
+
+### 동작 방식
+
+- `enabled: true`인 항목 전체에 **팬아웃** — 여러 채널을 동시에 설정할 수 있습니다.
+- 하나 이상의 채널이 성공하면 HTTP 200 응답, `notified: true`.
+- 활성화된 채널이 없거나 전부 실패하면 HTTP 502 응답 또는 `notified: false`.
+- config.json이 없거나 `notifiers` 목록이 비어 있으면 이벤트는 로그에 기록되지만 알림은 전송되지 않으며 응답에 `notified: false`가 포함됩니다.
+
+### 새 채널 추가
+
+1. `~/.user-state-notify/scripts/notifiers.py`에 클래스를 구현합니다.
+
+   ```python
+   class MyNotifier:
+       type = "mytype"
+
+       def send(self, cfg: dict, message: str) -> None:
+           # cfg는 config.json notifiers 배열의 해당 항목
+           # 실패 시 예외를 raise하면 프록시가 에러를 로그에 기록합니다
+           ...
+   ```
+
+2. 같은 파일 하단의 `REGISTRY`에 등록합니다.
+
+   ```python
+   REGISTRY["mytype"] = MyNotifier()
+   ```
+
+3. `~/.user-state-notify/config.json`의 `notifiers` 배열에 항목을 추가합니다.
+
+   ```json
+   { "type": "mytype", "enabled": true, "my_param": "value" }
+   ```
+
+4. 프록시를 재시작하면 즉시 적용됩니다(`launchctl unload/load com.kjlee.location-proxy.plist`).
+
 ## 위치/컨텍스트 리마인더
 
 특정 장소·디바이스에서 PC를 활성화하면 묶어 둔 할 일을 알림으로 띄웁니다.

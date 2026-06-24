@@ -173,16 +173,20 @@ Hermes 환경에 맞춰 webhook이 먼저 설정되어 있어야 합니다. 이�
    class MyNotifier:
        type = "mytype"
 
-       def send(self, cfg: dict, message: str) -> None:
-           # cfg는 config.json notifiers 배열의 해당 항목
-           # 실패 시 예외를 raise하면 프록시가 에러를 로그에 기록합니다
+       def __init__(self, conf: dict, *, http_post=_http_post, runner=subprocess.run):
+           # conf는 config.json notifiers 배열의 해당 항목
+           # 필수 필드가 없으면 ValueError를 raise하세요 (build_notifiers가 errors에 기록하고 건너뜁니다)
+           self.target = conf["my_param"]
+
+       def send(self, message: str, event: dict) -> tuple[bool, str]:
+           # 성공 시 (True, detail), 실패 시 (False, detail) 반환
            ...
    ```
 
 2. 같은 파일 하단의 `REGISTRY`에 등록합니다.
 
    ```python
-   REGISTRY["mytype"] = MyNotifier()
+   REGISTRY["mytype"] = MyNotifier
    ```
 
 3. `~/.user-state-notify/config.json`의 `notifiers` 배열에 항목을 추가합니다.

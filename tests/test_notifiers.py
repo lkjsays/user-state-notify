@@ -30,3 +30,32 @@ class LoadConfigTests(unittest.TestCase):
         config, err = notifiers.load_config(p)
         self.assertIsNone(config)
         self.assertIn("invalid", err.lower())
+
+
+class FakeHTTP:
+    def __init__(self, result=(True, "200 ok")):
+        self.result = result
+        self.calls = []
+
+    def __call__(self, url, data, headers, timeout=10):
+        self.calls.append({"url": url, "data": data, "headers": headers})
+        return self.result
+
+
+class TelegramTests(unittest.TestCase):
+    def test_send_posts_to_bot_api(self):
+        http = FakeHTTP()
+        n = notifiers.TelegramNotifier(
+            {"bot_token": "TK", "chat_id": "42"}, http_post=http
+        )
+        ok, detail = n.send("안녕", {"type": "device.login"})
+        self.assertTrue(ok)
+        self.assertEqual(n.type, "telegram")
+        self.assertIn("/botTK/sendMessage", http.calls[0]["url"])
+        payload = json.loads(http.calls[0]["data"].decode("utf-8"))
+        self.assertEqual(payload["chat_id"], "42")
+        self.assertEqual(payload["text"], "안녕")
+
+    def test_missing_field_raises(self):
+        with self.assertRaises(ValueError):
+            notifiers.TelegramNotifier({"bot_token": "TK"})

@@ -37,3 +37,20 @@ def _http_post(url: str, data: bytes, headers: dict, timeout: int = 10) -> tuple
         return False, f"http {exc.code} {detail[:200]}"
     except Exception as exc:
         return False, str(exc)
+
+
+class TelegramNotifier:
+    type = "telegram"
+
+    def __init__(self, conf: dict, *, http_post=_http_post, runner=subprocess.run):
+        try:
+            self.bot_token = conf["bot_token"]
+            self.chat_id = conf["chat_id"]
+        except KeyError as exc:
+            raise ValueError(f"telegram notifier missing field: {exc}") from exc
+        self._http_post = http_post
+
+    def send(self, message: str, event: dict) -> tuple[bool, str]:
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        data = json.dumps({"chat_id": self.chat_id, "text": message}, ensure_ascii=False).encode("utf-8")
+        return self._http_post(url, data, {"Content-Type": "application/json; charset=utf-8"}, 10)

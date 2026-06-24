@@ -130,10 +130,10 @@ def build_notifiers(config: dict, *, http_post=_http_post, runner=subprocess.run
     return built, errors
 
 
-def notify(message: str, event: dict, notifiers: list) -> tuple[bool, list[dict]]:
+def notify(message: str, event: dict, targets: list) -> tuple[bool, list[dict]]:
     results: list[dict] = []
     any_ok = False
-    for n in notifiers:
+    for n in targets:
         try:
             ok, detail = n.send(message, event)
         except Exception as exc:

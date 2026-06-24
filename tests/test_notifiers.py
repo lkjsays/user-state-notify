@@ -83,3 +83,35 @@ class WebhookTests(unittest.TestCase):
     def test_missing_url_raises(self):
         with self.assertRaises(ValueError):
             notifiers.WebhookNotifier({})
+
+
+class FakeProc:
+    def __init__(self, returncode=0, stdout="ok", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class HermesTests(unittest.TestCase):
+    def test_send_invokes_hermes_trigger(self):
+        calls = []
+
+        def runner(cmd, **kwargs):
+            calls.append(cmd)
+            return FakeProc(returncode=0, stdout="delivered")
+
+        n = notifiers.HermesNotifier({"webhook_name": "wh"}, runner=runner)
+        ok, detail = n.send("hi", {"type": "device.login"})
+        self.assertTrue(ok)
+        self.assertEqual(n.type, "hermes")
+        self.assertEqual(calls[0][:4], ["hermes", "webhook", "trigger", "wh"])
+
+    def test_send_falls_back_to_send_subcommand(self):
+        seq = [FakeProc(returncode=1, stderr="no trigger"), FakeProc(returncode=0, stdout="sent")]
+
+        def runner(cmd, **kwargs):
+            return seq.pop(0)
+
+        n = notifiers.HermesNotifier({}, runner=runner)  # default webhook_name
+        ok, _ = n.send("hi", {})
+        self.assertTrue(ok)

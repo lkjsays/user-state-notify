@@ -73,3 +73,33 @@ class WebhookNotifier:
         ).encode("utf-8")
         headers = {"Content-Type": "application/json; charset=utf-8", **self.extra_headers}
         return self._http_post(self.url, data, headers, 10)
+
+
+class HermesNotifier:
+    type = "hermes"
+
+    def __init__(self, conf: dict, *, http_post=_http_post, runner=subprocess.run):
+        self.webhook_name = conf.get("webhook_name", "user-state-notify")
+        self._runner = runner
+
+    def send(self, message: str, event: dict) -> tuple[bool, str]:
+        payload = json.dumps(
+            {"event": event, "message": message, "text": message}, ensure_ascii=False
+        )
+        candidates = [
+            ["hermes", "webhook", "trigger", self.webhook_name, "--json", payload],
+            ["hermes", "webhook", "send", self.webhook_name, "--json", payload],
+        ]
+        last = ""
+        for cmd in candidates:
+            try:
+                proc = self._runner(cmd, text=True, capture_output=True, timeout=20)
+            except FileNotFoundError:
+                return False, "hermes command not found"
+            except Exception as exc:
+                last = str(exc)
+                continue
+            if proc.returncode == 0:
+                return True, (proc.stdout or "").strip()
+            last = ((proc.stderr or proc.stdout) or "").strip()
+        return False, last

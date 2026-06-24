@@ -59,3 +59,27 @@ class TelegramTests(unittest.TestCase):
     def test_missing_field_raises(self):
         with self.assertRaises(ValueError):
             notifiers.TelegramNotifier({"bot_token": "TK"})
+
+
+class WebhookTests(unittest.TestCase):
+    def test_send_posts_json_with_headers(self):
+        http = FakeHTTP()
+        n = notifiers.WebhookNotifier(
+            {"url": "https://h.example/hook", "headers": {"Authorization": "Bearer X"}},
+            http_post=http,
+        )
+        ok, _ = n.send("메모", {"type": "device.wake"})
+        self.assertTrue(ok)
+        self.assertEqual(n.type, "webhook")
+        call = http.calls[0]
+        self.assertEqual(call["url"], "https://h.example/hook")
+        self.assertEqual(call["headers"]["Authorization"], "Bearer X")
+        self.assertEqual(call["headers"]["Content-Type"], "application/json; charset=utf-8")
+        body = json.loads(call["data"].decode("utf-8"))
+        self.assertEqual(body["message"], "메모")
+        self.assertEqual(body["text"], "메모")
+        self.assertEqual(body["event"]["type"], "device.wake")
+
+    def test_missing_url_raises(self):
+        with self.assertRaises(ValueError):
+            notifiers.WebhookNotifier({})

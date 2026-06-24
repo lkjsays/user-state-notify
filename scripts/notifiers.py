@@ -54,3 +54,22 @@ class TelegramNotifier:
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         data = json.dumps({"chat_id": self.chat_id, "text": message}, ensure_ascii=False).encode("utf-8")
         return self._http_post(url, data, {"Content-Type": "application/json; charset=utf-8"}, 10)
+
+
+class WebhookNotifier:
+    type = "webhook"
+
+    def __init__(self, conf: dict, *, http_post=_http_post, runner=subprocess.run):
+        url = conf.get("url")
+        if not url:
+            raise ValueError("webhook notifier missing field: 'url'")
+        self.url = url
+        self.extra_headers = dict(conf.get("headers") or {})
+        self._http_post = http_post
+
+    def send(self, message: str, event: dict) -> tuple[bool, str]:
+        data = json.dumps(
+            {"message": message, "text": message, "event": event}, ensure_ascii=False
+        ).encode("utf-8")
+        headers = {"Content-Type": "application/json; charset=utf-8", **self.extra_headers}
+        return self._http_post(self.url, data, headers, 10)

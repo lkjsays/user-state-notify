@@ -93,7 +93,7 @@ class FakeProc:
 
 
 class HermesTests(unittest.TestCase):
-    def test_send_invokes_hermes_trigger(self):
+    def test_send_invokes_webhook_test_primary(self):
         calls = []
 
         def runner(cmd, **kwargs):
@@ -104,17 +104,28 @@ class HermesTests(unittest.TestCase):
         ok, detail = n.send("hi", {"type": "device.login"})
         self.assertTrue(ok)
         self.assertEqual(n.type, "hermes")
-        self.assertEqual(calls[0][:4], ["hermes", "webhook", "trigger", "wh"])
+        # primary command is `webhook test --payload`; the binary path is
+        # machine-resolved, so assert on the subcommand portion only.
+        self.assertEqual(calls[0][1:4], ["webhook", "test", "wh"])
+        self.assertIn("--payload", calls[0])
 
-    def test_send_falls_back_to_send_subcommand(self):
-        seq = [FakeProc(returncode=1, stderr="no trigger"), FakeProc(returncode=0, stdout="sent")]
+    def test_send_falls_back_through_candidates(self):
+        seq = [
+            FakeProc(returncode=1, stderr="no test"),
+            FakeProc(returncode=0, stdout="triggered"),
+        ]
+        calls = []
 
         def runner(cmd, **kwargs):
+            calls.append(cmd)
             return seq.pop(0)
 
         n = notifiers.HermesNotifier({}, runner=runner)  # default webhook_name
         ok, _ = n.send("hi", {})
         self.assertTrue(ok)
+        # fell back from `test` to `trigger`
+        self.assertEqual(calls[0][1:3], ["webhook", "test"])
+        self.assertEqual(calls[1][1:3], ["webhook", "trigger"])
 
 
 class BuildNotifiersTests(unittest.TestCase):

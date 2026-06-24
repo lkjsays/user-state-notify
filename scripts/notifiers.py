@@ -8,6 +8,8 @@ so the dispatcher and notifiers can be tested without a network or Hermes.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import urllib.error
 import urllib.request
@@ -75,20 +77,50 @@ class WebhookNotifier:
         return self._http_post(self.url, data, headers, 10)
 
 
+def _resolve_hermes_bin() -> str:
+    """Locate the `hermes` CLI in launchd contexts where PATH is minimal.
+
+    Order: $HERMES_BIN env override, PATH lookup, then known install locations.
+    Returns "hermes" as last-resort fallback (still FileNotFoundError, but keeps
+    the existing error path intact).
+    """
+    override = os.environ.get("HERMES_BIN")
+    if override and Path(override).is_file() and os.access(override, os.X_OK):
+        return override
+    found = shutil.which("hermes")
+    if found:
+        return found
+    home = Path.home()
+    candidates = [
+        home / ".hermes" / "hermes-agent" / "venv" / "bin" / "hermes",
+        home / ".local" / "bin" / "hermes",
+        Path("/opt/homebrew/bin/hermes"),
+        Path("/usr/local/bin/hermes"),
+    ]
+    for c in candidates:
+        if c.is_file() and os.access(c, os.X_OK):
+            return str(c)
+    return "hermes"
+
+
 class HermesNotifier:
     type = "hermes"
 
     def __init__(self, conf: dict, *, http_post=_http_post, runner=subprocess.run):
         self.webhook_name = conf.get("webhook_name", "user-state-notify")
         self._runner = runner
+        self.hermes_bin = _resolve_hermes_bin()
 
     def send(self, message: str, event: dict) -> tuple[bool, str]:
         payload = json.dumps(
             {"event": event, "message": message, "text": message}, ensure_ascii=False
         )
+        # `webhook test --payload` is the actual existing subcommand; keep
+        # trigger/send as fallbacks for forward compatibility.
         candidates = [
-            ["hermes", "webhook", "trigger", self.webhook_name, "--json", payload],
-            ["hermes", "webhook", "send", self.webhook_name, "--json", payload],
+            [self.hermes_bin, "webhook", "test", self.webhook_name, "--payload", payload],
+            [self.hermes_bin, "webhook", "trigger", self.webhook_name, "--json", payload],
+            [self.hermes_bin, "webhook", "send", self.webhook_name, "--json", payload],
         ]
         last = ""
         for cmd in candidates:

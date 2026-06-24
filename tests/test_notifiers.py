@@ -115,3 +115,60 @@ class HermesTests(unittest.TestCase):
         n = notifiers.HermesNotifier({}, runner=runner)  # default webhook_name
         ok, _ = n.send("hi", {})
         self.assertTrue(ok)
+
+
+class BuildNotifiersTests(unittest.TestCase):
+    def test_builds_enabled_only_and_records_errors(self):
+        http = FakeHTTP()
+        config = {"notifiers": [
+            {"type": "telegram", "enabled": True, "bot_token": "T", "chat_id": "1"},
+            {"type": "webhook", "enabled": False, "url": "https://x"},
+            {"type": "telegram", "enabled": True, "bot_token": "T"},   # missing chat_id
+            {"type": "mystery", "enabled": True},                       # unknown type
+        ]}
+        ns, errors = notifiers.build_notifiers(config, http_post=http)
+        self.assertEqual([n.type for n in ns], ["telegram"])
+        self.assertEqual(len(errors), 2)
+
+    def test_enabled_defaults_true(self):
+        config = {"notifiers": [{"type": "webhook", "url": "https://x"}]}
+        ns, errors = notifiers.build_notifiers(config)
+        self.assertEqual(len(ns), 1)
+        self.assertEqual(errors, [])
+
+
+class NotifyTests(unittest.TestCase):
+    def test_fanout_partial_failure_is_any_ok(self):
+        ok_http = FakeHTTP((True, "200"))
+        bad_http = FakeHTTP((False, "boom"))
+        ns = [
+            notifiers.TelegramNotifier({"bot_token": "T", "chat_id": "1"}, http_post=ok_http),
+            notifiers.WebhookNotifier({"url": "https://x"}, http_post=bad_http),
+        ]
+        any_ok, results = notifiers.notify("m", {"type": "device.wake"}, ns)
+        self.assertTrue(any_ok)
+        self.assertEqual([r["ok"] for r in results], [True, False])
+
+    def test_all_fail(self):
+        bad = FakeHTTP((False, "boom"))
+        ns = [notifiers.WebhookNotifier({"url": "https://x"}, http_post=bad)]
+        any_ok, results = notifiers.notify("m", {}, ns)
+        self.assertFalse(any_ok)
+
+    def test_empty_notifiers(self):
+        any_ok, results = notifiers.notify("m", {}, [])
+        self.assertFalse(any_ok)
+        self.assertEqual(results, [])
+
+    def test_exception_in_one_does_not_block_others(self):
+        class Boom:
+            type = "boom"
+            def send(self, message, event):
+                raise RuntimeError("kaboom")
+        ok_http = FakeHTTP((True, "200"))
+        ns = [Boom(), notifiers.TelegramNotifier({"bot_token": "T", "chat_id": "1"}, http_post=ok_http)]
+        any_ok, results = notifiers.notify("m", {}, ns)
+        self.assertTrue(any_ok)
+        self.assertFalse(results[0]["ok"])
+        self.assertIn("kaboom", results[0]["detail"])
+        self.assertTrue(results[1]["ok"])

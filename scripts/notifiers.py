@@ -103,3 +103,41 @@ class HermesNotifier:
                 return True, (proc.stdout or "").strip()
             last = ((proc.stderr or proc.stdout) or "").strip()
         return False, last
+
+
+REGISTRY = {
+    "telegram": TelegramNotifier,
+    "webhook": WebhookNotifier,
+    "hermes": HermesNotifier,
+}
+
+
+def build_notifiers(config: dict, *, http_post=_http_post, runner=subprocess.run) -> tuple[list, list[str]]:
+    built: list = []
+    errors: list[str] = []
+    for i, conf in enumerate(config.get("notifiers", [])):
+        if not conf.get("enabled", True):
+            continue
+        ntype = conf.get("type")
+        cls = REGISTRY.get(ntype)
+        if cls is None:
+            errors.append(f"unknown notifier type {ntype!r} (entry {i})")
+            continue
+        try:
+            built.append(cls(conf, http_post=http_post, runner=runner))
+        except ValueError as exc:
+            errors.append(f"{ntype} config error (entry {i}): {exc}")
+    return built, errors
+
+
+def notify(message: str, event: dict, notifiers: list) -> tuple[bool, list[dict]]:
+    results: list[dict] = []
+    any_ok = False
+    for n in notifiers:
+        try:
+            ok, detail = n.send(message, event)
+        except Exception as exc:
+            ok, detail = False, f"exception: {exc}"
+        results.append({"type": getattr(n, "type", "?"), "ok": bool(ok), "detail": detail})
+        any_ok = any_ok or bool(ok)
+    return any_ok, results

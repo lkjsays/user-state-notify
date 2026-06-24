@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,13 +24,19 @@ STATE_FILE = STATE_DIR / "user_state.json"
 EVENT_LOG = LOG_DIR / "user_state_events.jsonl"
 PROXY_LOG = LOG_DIR / "user_state_notify_proxy.log"
 
-WEBHOOK_NAME = os.environ.get("USER_STATE_WEBHOOK", "user-state-notify")
 DEFAULT_PORT = int(os.environ.get("USER_STATE_PORT", "8645"))
 
 import reminders
+import notifiers
 
 EXPECTED_SECRET = os.environ.get("USER_STATE_SECRET", "hermes-claude-hook")
 REMINDER_STORE = reminders.ReminderStore()
+
+NOTIFY_CONFIG, NOTIFY_CONFIG_ERR = notifiers.load_config()
+if NOTIFY_CONFIG is None:
+    NOTIFIERS, NOTIFY_BUILD_ERRS = [], [NOTIFY_CONFIG_ERR]
+else:
+    NOTIFIERS, NOTIFY_BUILD_ERRS = notifiers.build_notifiers(NOTIFY_CONFIG)
 
 LOCATION_EVENTS = {
     "/home_arrive": ("location.arrive", "home", "arrive", "집에 도착했어요"),
@@ -167,38 +172,15 @@ def update_state(event: dict) -> dict:
     return state
 
 
-def forward_to_hermes(event: dict) -> tuple[bool, str]:
+def forward_event(event: dict) -> tuple[bool, list[dict]]:
     message = event.get("message") or event.get("type") or "user-state event"
-    payload = {
-        "event": event,
-        "message": message,
-        "text": message,
-    }
-
-    candidates = [
-        ["hermes", "webhook", "trigger", WEBHOOK_NAME, "--json", json.dumps(payload, ensure_ascii=False)],
-        ["hermes", "webhook", "send", WEBHOOK_NAME, "--json", json.dumps(payload, ensure_ascii=False)],
-    ]
-
-    last = ""
-    for cmd in candidates:
-        try:
-            proc = subprocess.run(cmd, text=True, capture_output=True, timeout=20)
-        except FileNotFoundError:
-            return False, "hermes command not found"
-        except Exception as exc:
-            last = str(exc)
-            continue
-        if proc.returncode == 0:
-            return True, proc.stdout.strip()
-        last = (proc.stderr or proc.stdout).strip()
-    return False, last
+    return notifiers.notify(message, event, NOTIFIERS)
 
 
 def forward_reminder_message(message: str) -> bool:
-    ok, detail = forward_to_hermes({"message": message})
-    log_line(f"reminder_forward ok={ok} detail={detail[:200]}")
-    return ok
+    any_ok, results = notifiers.notify(message, {"message": message}, NOTIFIERS)
+    log_line(f"reminder_forward ok={any_ok} results={results}")
+    return any_ok
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -274,8 +256,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         state = update_state(event)
-        ok, detail = forward_to_hermes(event)
-        log_line(f"event={event.get('type')} path={path} webhook_ok={ok} detail={detail[:300]}")
+        any_ok, results = forward_event(event)
+        log_line(f"event={event.get('type')} path={path} notify_results={results}")
 
         if (event.get("type") or "").startswith("device."):
             try:
@@ -285,7 +267,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # reminders are additive; never break the event response
                 log_line(f"reminder_error={exc}")
 
-        self.write_json(200, {"ok": True, "event": event, "webhook_ok": ok, "webhook_detail": detail, "state_updated_at": state.get("updated_at")})
+        if not NOTIFIERS:
+            status, notified = 200, False
+        elif any_ok:
+            status, notified = 200, True
+        else:
+            status, notified = 502, False
+        self.write_json(status, {
+            "ok": True, "event": event,
+            "notified": notified, "notify_results": results,
+            "state_updated_at": state.get("updated_at"),
+        })
 
 
 def main() -> int:
@@ -296,7 +288,8 @@ def main() -> int:
 
     ensure_dirs()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    log_line(f"starting host={args.host} port={args.port} webhook={WEBHOOK_NAME}")
+    log_line(f"starting host={args.host} port={args.port} "
+             f"notifiers={[n.type for n in NOTIFIERS]} config_errors={NOTIFY_BUILD_ERRS}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -1,13 +1,13 @@
 ---
 name: location-reminders
-description: "Register location/device-context reminders that fire when the user activates a Mac at a place. Use when the user asks to be reminded to do something 'when I get to the office', 'on my work Mac', '@회사맥', etc."
-version: 1.0.0
+description: "Register location/device-context reminders that fire when the user next activates a Mac (login/wake/unlock) at a place or on a device — deferred, not immediate, notifications. Use whenever the user ties a task, notification, or 'let me know' to a place or a specific machine, even phrased casually or as a question: '회사맥 알림 줄 수 있니?', '회사맥에 알림 걸어줘', '집맥 켜면 ~', '회사 가면 ~ 알려줘', '@회사맥 ~ 기억해', 'remind me on my work Mac'. Any mention of a device/place alias (회사맥, 집맥, 회사맥북, 회사, 집) combined with remind/notify intent should trigger this skill. If unsure whether the user wants an immediate message or a context-triggered reminder, still consult this skill and offer it as an option. Time/date reminders ('3시에', 'tomorrow') belong to apple-reminders instead."
+version: 1.1.0
 author: kijeong.lee
 license: MIT
 platforms: [macos]
 metadata:
   hermes:
-    tags: [reminder, reminders, location, context, todo, tasks, 리마인더, 알림, user-state-notify]
+    tags: [reminder, reminders, location, context, todo, tasks, notify, 리마인더, 알림, 알려줘, 회사맥, 집맥, user-state-notify]
 prerequisites:
   commands: [curl]
 ---
@@ -48,10 +48,24 @@ a location or a specific computer, e.g.:
 - "회사 가면 보고서 쓰라고 알려줘" → place = office
 - "집 컴퓨터 켜면 ~ 하라고 알려줘" → device = mac-mini-home
 - "회사 맥에서 ~ / @회사맥 ~" → device = mac-studio-office
+- "회사맥 알림 줄 수 있니?" → device = mac-studio-office (질문형이어도 등록 의도)
+- "집맥 켜면 그거 보여줘" → device = mac-mini-home
 - "remind me to review the PR when I'm on my work Mac"
+
+Requests may be phrased as questions ("~줄 수 있니?") or casual statements,
+not just imperatives. A device/place alias appearing anywhere in the message
+is a strong signal, with or without the `@` prefix.
 
 Do **not** use this for time-based reminders ("at 3pm", "tomorrow") — that is
 `apple-reminders`.
+
+### When the intent is ambiguous
+
+If you cannot tell whether the user wants an **immediate** notification or a
+**context** reminder ("next time that Mac is active"), do NOT guess and do
+NOT omit this skill from your clarifying options. Always include
+"register it as a reminder that fires when that Mac is activated
+(login/wake/unlock)" as one of the choices you offer.
 
 ## How To Register
 

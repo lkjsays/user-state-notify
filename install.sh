@@ -112,6 +112,11 @@ install_client() {
   fetch scripts/notify_login.sh "$INSTALL_ROOT/notify_login.sh"
   chmod +x "$INSTALL_ROOT/notify_login.sh"
 
+  # Local activity check (used by Claude Code notify hook to skip
+  # notifications while the user is actively using this Mac)
+  fetch scripts/is_user_active.sh "$INSTALL_ROOT/is_user_active.sh"
+  chmod +x "$INSTALL_ROOT/is_user_active.sh"
+
   local plist="$LAUNCHD_DIR/com.kjlee.user-state-login-notify.plist"
   fetch launchd/com.kjlee.user-state-login-notify.plist.template "$plist.tmp"
   python3 - "$plist.tmp" "$plist" "$HOME" "$SERVER_URL" <<'PY'

@@ -126,6 +126,7 @@ POST 방식 권장. GET도 호환됩니다.
 - `~/.user-state-notify/scripts/reminders.py`
 - `~/.user-state-notify/scripts/location_proxy.py`
 - `~/.user-state-notify/scripts/notify_login.sh`
+- `~/.user-state-notify/scripts/is_user_active.sh`
 - `~/.user-state-notify/scripts/watch_macos_session.sh`
 - `~/Library/LaunchAgents/com.kjlee.location-proxy.plist`
 - `~/Library/LaunchAgents/com.kjlee.user-state-login-notify.plist`
@@ -287,6 +288,38 @@ Telegram으로 Hermes에게 보냅니다:
 #### 참고: `apple-reminders`와 구분
 
 Hermes 기본 스킬 `apple-reminders`(시간/날짜 기반, iPhone 동기화)와 이 스킬(장소/디바이스 컨텍스트 기반)이 "리마인더"라는 말에 둘 다 반응할 수 있습니다. 스킬 설명에 "시간 기반은 apple-reminders, 장소/디바이스 기반은 이쪽"이라고 구분을 넣어두었습니다. Hermes가 헷갈리면 "회사 가면"/"~ 켜면"처럼 컨텍스트를 명확히 말하면 됩니다.
+
+## 사용 중 Mac의 Claude 알림 스킵
+
+Claude Code 훅 알림(작업 완료/오류/권한 요청)을 받을 때, 그 Mac 앞에 앉아
+화면을 직접 보고 있다면 텔레그램 알림은 중복입니다.
+`~/.user-state-notify/scripts/is_user_active.sh`가 로컬 신호만으로
+"지금 이 Mac을 사용 중인가"를 판정합니다.
+
+- **활성 판정(종료 코드 0)**: 화면 잠금 해제(`IOConsoleLocked=false`)
+  **그리고** 최근 입력(`HIDIdleTime` ≤ 임계값, 기본 180초).
+- 그 외(잠김, 유휴 초과, ioreg 실패 등)는 전부 비활성(종료 코드 1) —
+  중복 알림이 유실보다 낫다는 원칙(fail-open)입니다.
+- 임계값은 `USER_STATE_ACTIVE_IDLE_SEC` 환경 변수로 재정의합니다.
+
+진단:
+
+```bash
+~/.user-state-notify/scripts/is_user_active.sh --explain
+# locked=false idle_sec=2 threshold_sec=180 verdict=active
+```
+
+Claude Code 훅 스크립트(예: `~/.claude/hooks/notify.sh`) 맨 앞에 다음을
+추가하면, 사용 중일 때 알림 전송을 통째로 건너뜁니다:
+
+```bash
+ACTIVE_CHECK="$HOME/.user-state-notify/scripts/is_user_active.sh"
+if [ -x "$ACTIVE_CHECK" ] && "$ACTIVE_CHECK" >/dev/null 2>&1; then
+  exit 0   # 이 Mac을 사용 중 — 화면에서 직접 보고 있으므로 알림 생략
+fi
+```
+
+헬퍼가 설치되지 않은 Mac에서는 조건이 성립하지 않아 기존대로 전송됩니다.
 
 ## 절전 해제 / 잠금 해제 감지 방식
 

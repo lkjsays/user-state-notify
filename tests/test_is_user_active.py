@@ -1,4 +1,5 @@
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -8,15 +9,29 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "is_user_active.sh"
 
 # ioreg 호출을 가로채는 가짜 바이너리. 환경 변수로 시나리오를 제어한다:
-#   FAKE_LOCKED=true|false     IOConsoleLocked 값
-#   FAKE_IDLE_NS=<nanoseconds> HIDIdleTime 값
-#   FAKE_NO_IDLE=1             HIDIdleTime 키 자체를 생략
-#   FAKE_IOREG_FAIL=1          ioreg가 비정상 종료
+#   FAKE_LOCKED=true|false       IOConsoleLocked 값
+#   FAKE_IDLE_NS=<nanoseconds>   HIDIdleTime 값
+#   FAKE_NO_IDLE=1               HIDIdleTime 키 자체를 생략
+#   FAKE_IOREG_FAIL=1            ioreg가 비정상 종료
+#   FAKE_NO_LOCKED_KEY=1         IOConsoleLocked 키 자체를 생략 (다른 키만 존재)
+#   FAKE_IDLE_GARBAGE=1          HIDIdleTime 값이 숫자가 아닌 값(<deadbeef>)
 FAKE_IOREG = r"""#!/bin/bash
 if [ "${FAKE_IOREG_FAIL:-}" = "1" ]; then exit 1; fi
 case "$*" in
   *"-n Root"*)
-    cat <<EOF
+    if [ "${FAKE_NO_LOCKED_KEY:-}" = "1" ]; then
+      cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>SomethingElse</key>
+  <true/>
+</dict>
+</plist>
+EOF
+    else
+      cat <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -26,10 +41,13 @@ case "$*" in
 </dict>
 </plist>
 EOF
+    fi
     ;;
   *"-c IOHIDSystem"*)
     if [ "${FAKE_NO_IDLE:-}" = "1" ]; then
       echo '      "SomethingElse" = 1'
+    elif [ "${FAKE_IDLE_GARBAGE:-}" = "1" ]; then
+      echo '      "HIDIdleTime" = <deadbeef>'
     else
       echo "      \"HIDIdleTime\" = ${FAKE_IDLE_NS:-0}"
     fi
@@ -41,6 +59,7 @@ esac
 class IsUserActiveTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
         fake = self.tmp / "ioreg"
         fake.write_text(FAKE_IOREG, encoding="utf-8")
         fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
@@ -72,6 +91,14 @@ class IsUserActiveTests(unittest.TestCase):
 
     def test_ioreg_failure_fails_open(self):
         r = self.run_script({"FAKE_IOREG_FAIL": "1"})
+        self.assertEqual(r.returncode, 1)
+
+    def test_missing_locked_key_fails_open(self):
+        r = self.run_script({"FAKE_NO_LOCKED_KEY": "1", "FAKE_IDLE_NS": str(5 * 10**9)})
+        self.assertEqual(r.returncode, 1)
+
+    def test_garbage_idle_time_fails_open(self):
+        r = self.run_script({"FAKE_LOCKED": "false", "FAKE_IDLE_GARBAGE": "1"})
         self.assertEqual(r.returncode, 1)
 
     def test_threshold_env_override(self):

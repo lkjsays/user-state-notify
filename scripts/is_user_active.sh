@@ -22,7 +22,8 @@ locked=$(ioreg -n Root -d1 -a 2>/dev/null | python3 -c '
 import plistlib, sys
 try:
     data = plistlib.loads(sys.stdin.buffer.read())
-    print("true" if data.get("IOConsoleLocked") else "false")
+    v = data.get("IOConsoleLocked")
+    print("unknown" if v is None else ("true" if v else "false"))
 except Exception:
     print("unknown")
 ' 2>/dev/null) || locked="unknown"
@@ -30,7 +31,7 @@ except Exception:
 
 # 2) 마지막 키보드/마우스 입력 후 경과 초: HIDIdleTime (나노초 → 초)
 idle=$(ioreg -c IOHIDSystem 2>/dev/null \
-  | awk '/HIDIdleTime/ {print int($NF/1000000000); exit}') || idle=""
+  | awk '/HIDIdleTime/ && $NF ~ /^[0-9]+$/ {print int($NF/1000000000); exit}') || idle=""
 
 verdict="inactive"
 rc=1
